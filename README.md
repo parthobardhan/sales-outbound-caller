@@ -1,21 +1,32 @@
-# Sales Outbound Caller
+# SalesAI - Outbound Caller Demo
 
-An AI-powered outbound sales calling system built with LiveKit Agents that makes automated sales calls and intelligently transfers high-quality leads to human sales representatives.
+An AI-powered outbound sales calling system built with LiveKit Agents. This demo showcases how AI agents can make **consented** outbound sales calls, qualify leads through natural conversation, and intelligently transfer high-intent prospects to human sales representatives.
+
+## Use Case
+
+**SalesAI** is a SaaS platform for making outbound sales calls to customers who have explicitly requested information. This is NOT a robo-dialer - all calls are made to prospects who have given prior consent (e.g., filled out a form, requested info, opted in).
+
+The AI agent:
+1. Makes the outbound call acknowledging prior consent
+2. Introduces the product/service (demo uses "CloudAnalytics AI")
+3. Asks discovery questions to understand customer needs
+4. Qualifies the lead based on interest and requirements
+5. Transfers to a human sales rep when specific criteria are met
 
 ## Features
 
-✅ **AI-Powered Outbound Calls** - Automated sales agent initiates calls to customers  
-✅ **Intelligent Lead Qualification** - AI qualifies leads through conversation  
-✅ **Smart Transfer Logic** - Automatically detects when human intervention is needed  
+✅ **Consented Outbound Calls** - Only calls prospects who requested information  
+✅ **AI-Powered Conversations** - Natural, contextual sales discussions  
+✅ **Intelligent Transfer Logic** - Detects when human expertise is needed  
 ✅ **Warm Handoff** - Sales rep receives conversation summary before connecting  
 ✅ **Hold Music** - Professional hold experience during transfers  
-✅ **Analytics Ready** - Logs transfer reasons and customer interest levels  
+✅ **Two-Room Architecture** - Customer on hold while sales rep is briefed  
 
 ## Architecture
 
 ### Components
 
-1. **OutboundAgent** - AI agent that makes initial calls to customers
+1. **OutboundAgent** - AI agent that initiates calls and qualifies leads
 2. **SupervisorAgent** - Briefing agent that summarizes conversation to sales rep
 3. **SessionManager** - Orchestrates the two-room transfer process
 
@@ -23,10 +34,10 @@ An AI-powered outbound sales calling system built with LiveKit Agents that makes
 
 The AI agent transfers to a human sales rep when:
 
-- Customer is ready to purchase or wants a quote
-- Customer asks about enterprise/custom pricing
-- Customer wants to discuss contract terms
-- Customer has detailed technical questions
+- Customer wants pricing, a quote, or requests a demo
+- Customer asks about enterprise plans or contract terms
+- Customer has detailed technical or integration questions
+- Customer shows strong buying intent (ready to purchase)
 - Customer has objections requiring negotiation
 - Customer explicitly requests to speak with someone
 
@@ -118,28 +129,40 @@ await make_call("+12125551234")
 
 ### Update Sales Script
 
-Edit the instructions in `warm_transfer.py`:
+Edit the instructions in `warm_transfer.py` (lines ~533-580) to customize:
+
+- Product/service name and description (currently "CloudAnalytics AI")
+- Discovery questions to ask
+- Greeting and consent acknowledgment
+- Transfer criteria and messaging
 
 ```python
-# Line ~497-520
 _outbound_agent_instructions = (
     _common_instructions
     + """
-    # Customize your sales script here
-    # Update product/service details
-    # Modify conversation flow
-    # Add specific features
+    # Identity
+    You are a sales representative calling on behalf of [YOUR COMPANY]...
+    
+    # Customize the rest for your product
     """
 )
 ```
 
 ### Adjust Transfer Criteria
 
-Modify the `transfer_to_human()` function in the `OutboundAgent` class to change when transfers occur.
+The AI will automatically detect when to transfer based on the conversation. You can adjust the criteria by modifying:
+1. The `transfer_to_human()` docstring in the `OutboundAgent` class (lines ~295-320)
+2. The transfer guidance in `_outbound_agent_instructions` (lines ~534-544)
 
 ### Change Hold Music
 
 Replace `hold_music.mp3` with your own audio file.
+
+### Consent Handling
+
+This demo assumes consent is obtained externally. The AI acknowledges this at the start of each call. To customize:
+- Update the greeting in `_outbound_agent_instructions` to match your consent model
+- Optionally pass customer context via metadata in `make_call.py`
 
 ## Project Structure
 
