@@ -21,9 +21,12 @@ from livekit.agents import (
     stt,
     tts,
 )
-from livekit.agents.llm import function_tool
+from livekit.agents.llm import function_tool, ToolError
 from livekit.plugins import cartesia, deepgram, noise_cancellation, openai, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
+
+# Import MongoDB helper functions
+import mongodb_helper
 
 logger = logging.getLogger("basic-agent")
 logger.setLevel(logging.DEBUG)
@@ -323,6 +326,104 @@ class OutboundAgent(Agent):
         await self.session_manager.start_transfer()
         return None
 
+    @function_tool
+    async def lookup_phone_number(self, context: RunContext, phone_number: str):
+        """Look up contact name and information for a phone number.
+        
+        Use this tool when you need to personalize the conversation by retrieving the contact's
+        name and basic information from the database.
+        
+        Args:
+            phone_number: The phone number in E.164 format (e.g., +13128487404)
+        
+        Returns:
+            Dictionary with contact information including name, company, and interest level,
+            or None if not found.
+        """
+        logger.info(f"Looking up phone number: {phone_number}")
+        
+        try:
+            contact_info = mongodb_helper.lookup_contact_by_phone(phone_number)
+            
+            if contact_info:
+                logger.info(f"Found contact: {contact_info.get('name')}")
+                return contact_info
+            else:
+                logger.info(f"No contact found for {phone_number}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error in lookup_phone_number tool: {e}")
+            raise ToolError(f"Unable to lookup phone number: {str(e)}")
+
+    @function_tool
+    async def get_previous_conversation(self, context: RunContext, phone_number: str):
+        """Retrieve summary of the previous conversation with this contact.
+        
+        Use this tool to reference past interactions and provide continuity in the conversation.
+        This helps create a more personalized experience by acknowledging previous discussions.
+        
+        Args:
+            phone_number: The phone number in E.164 format (e.g., +13128487404)
+        
+        Returns:
+            String summary of the previous conversation, or None if no history exists.
+        """
+        logger.info(f"Retrieving chat history for: {phone_number}")
+        
+        try:
+            chat_history = mongodb_helper.get_chat_history(phone_number)
+            
+            if chat_history:
+                logger.info(f"Found chat history for {phone_number}")
+                return chat_history
+            else:
+                logger.info(f"No chat history found for {phone_number}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error in get_previous_conversation tool: {e}")
+            raise ToolError(f"Unable to retrieve conversation history: {str(e)}")
+
+    @function_tool
+    async def compare_with_competitor(self, context: RunContext, competitor_name: str):
+        """Get CloudAnalytics AI differentiation compared to a competitor product.
+        
+        Call this tool when the customer mentions they are currently using or evaluating
+        another analytics product. This provides you with specific talking points about
+        how CloudAnalytics AI differs and complements their existing tools.
+        
+        Use this tool when customers mention products like:
+        - Snowflake (data warehouse)
+        - Databricks (data lakehouse platform)
+        - Sigma (business intelligence)
+        - Or other analytics/data platforms
+        
+        Args:
+            competitor_name: Name of the competitor product (e.g., "Snowflake", "Databricks")
+        
+        Returns:
+            Dictionary with technical_differentiation, benefits, and customer_proof_point,
+            or None if we don't have specific information about that competitor.
+        """
+        logger.info(f"Comparing with competitor: {competitor_name}")
+        
+        try:
+            competitor_info = mongodb_helper.search_competitor_product(competitor_name)
+            
+            if competitor_info:
+                logger.info(f"Found competitor information for {competitor_info.get('product_name')}")
+                return competitor_info
+            else:
+                logger.info(f"No specific comparison data for {competitor_name}")
+                # Return None to continue with normal flow - don't raise an error
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error in compare_with_competitor tool: {e}")
+            # Don't fail the conversation if competitor lookup fails
+            return None
+
 
 class SupervisorAgent(Agent):
     def __init__(self, prev_ctx: llm.ChatContext) -> None:
@@ -554,7 +655,7 @@ Your goal is to:
 # Approach
 
 Start with a warm greeting that acknowledges consent:
-"Hi, this is [your name] calling from CloudAnalytics AI. You recently requested information about 
+"Hi, this is Alyssa calling from CloudAnalytics AI. You recently requested information about 
 our platform. Is now a good time for a quick chat?"
 
 If yes, briefly explain the product:
@@ -566,6 +667,43 @@ Ask discovery questions:
 "Are you currently using any analytics tools?"
 
 Listen actively and respond naturally to their needs.
+
+# Available Tools
+
+You have access to several tools to personalize and enhance the conversation:
+
+## lookup_phone_number
+Use this to retrieve the contact's name and company information. This helps you personalize
+your greeting and reference their specific context. You can call this at the beginning of 
+the conversation if you want to address them by name.
+
+## get_previous_conversation
+Use this to retrieve notes from any previous conversations with this contact. This provides
+continuity and shows you remember their past interactions. Call this when you want to 
+reference what was discussed before.
+
+## compare_with_competitor
+IMPORTANT: Use this tool whenever the customer mentions they are currently using or evaluating
+another analytics or data platform. Common mentions to watch for:
+- "We're using Snowflake..."
+- "We have Databricks..."
+- "We're looking at Sigma..."
+- "Our data warehouse is..."
+- Any mention of competitor products
+
+When you receive competitor information from this tool, naturally weave the differentiation 
+into your conversation. Don't just read it verbatim - use it as talking points to address 
+their specific situation.
+
+Example flow:
+Customer: "We're currently using Snowflake for our data warehouse."
+[You call compare_with_competitor("Snowflake")]
+You: "That's great! Snowflake is excellent for data warehousing. CloudAnalytics AI actually 
+complements Snowflake really well - we sit on top of your warehouse and add AI-powered 
+analytics without requiring SQL. Your business users can ask questions in plain English..."
+
+If the tool returns None (competitor not in our database), continue with general discovery:
+"That's interesting. What are you finding works well with [product]? What challenges are you facing?"
 
 # Transferring to a human sales rep
 

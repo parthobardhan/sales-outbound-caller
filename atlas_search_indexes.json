@@ -1,0 +1,87 @@
+{
+  "instructions": [
+    "Atlas Search indexes must be created manually through the MongoDB Atlas UI.",
+    "Follow these steps:",
+    "1. Log in to MongoDB Atlas (https://cloud.mongodb.com)",
+    "2. Navigate to your cluster",
+    "3. Click on the 'Search' tab (or 'Atlas Search' in newer UI)",
+    "4. Click 'Create Search Index'",
+    "5. Choose 'JSON Editor' mode",
+    "6. Create TWO separate indexes using the definitions below"
+  ],
+  "indexes": [
+    {
+      "name": "contacts_phone_search",
+      "collection": "contacts",
+      "database": "sales_outbound",
+      "description": "Exact match search for phone numbers in contacts collection",
+      "definition": {
+        "mappings": {
+          "dynamic": false,
+          "fields": {
+            "phone_number": {
+              "type": "string",
+              "analyzer": "keyword"
+            },
+            "name": {
+              "type": "string"
+            },
+            "company": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "notes": [
+        "This index enables exact matching on phone_number field",
+        "We use 'keyword' analyzer to avoid tokenization for exact matches"
+      ]
+    },
+    {
+      "name": "products_name_search",
+      "collection": "products",
+      "database": "sales_outbound",
+      "description": "Full-text search for product names in products collection",
+      "definition": {
+        "mappings": {
+          "dynamic": false,
+          "fields": {
+            "name": {
+              "type": "string",
+              "analyzer": "lucene.standard"
+            },
+            "category": {
+              "type": "string"
+            },
+            "technical_differentiation": {
+              "type": "string"
+            },
+            "benefits": {
+              "type": "string"
+            },
+            "customer_proof_point": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "notes": [
+        "This index enables fuzzy matching and full-text search on product names",
+        "Useful for finding products even with slight misspellings or variations",
+        "The standard analyzer tokenizes and normalizes text for better matching"
+      ]
+    }
+  ],
+  "verification": [
+    "After creating the indexes, verify they are active:",
+    "1. Check the Search tab shows both indexes with 'Active' status",
+    "2. Run a test query from the Atlas Search UI to ensure data is indexed",
+    "3. Test from your application using mongodb_helper.py functions"
+  ],
+  "alternative_simple_indexes": {
+    "note": "If you prefer simpler setup without Atlas Search (not recommended for production), you can skip Atlas Search indexes and use regular MongoDB queries. The mongodb_helper.py will fall back to simple find() queries, but fuzzy matching won't work as well.",
+    "contacts_regular_index": "Already created by setup_mongodb.py: db.contacts.createIndex({phone_number: 1})",
+    "products_regular_index": "Already created by setup_mongodb.py: db.products.createIndex({name: 1})"
+  }
+}
+

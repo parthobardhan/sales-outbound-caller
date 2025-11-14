@@ -21,6 +21,9 @@ The AI agent:
 ✅ **Warm Handoff** - Sales rep receives conversation summary before connecting  
 ✅ **Hold Music** - Professional hold experience during transfers  
 ✅ **Two-Room Architecture** - Customer on hold while sales rep is briefed  
+✅ **Agentic Tools** - MongoDB-backed tools for personalization and competitive intelligence  
+✅ **Contact Lookup** - Retrieve contact info and conversation history for personalized calls  
+✅ **Competitive Analysis** - AI agent compares your product vs competitors on the fly  
 
 ## Architecture
 
@@ -49,6 +52,7 @@ The AI agent transfers to a human sales rep when:
 - LiveKit Cloud account
 - SIP trunk configured for outbound calls
 - API keys for OpenAI, Deepgram, and Cartesia
+- MongoDB Atlas account (for agentic tools)
 
 ### Installation
 
@@ -89,7 +93,57 @@ LIVEKIT_SUPERVISOR_PHONE_NUMBER=+12125551234
 OPENAI_API_KEY=sk-xxxxx
 DEEPGRAM_API_KEY=xxxxx
 CARTESIA_API_KEY=xxxxx
+
+# MongoDB (for agentic tools)
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/?retryWrites=true&w=majority
 ```
+
+### MongoDB Setup (Agentic Tools)
+
+The agent uses MongoDB to power intelligent tools for personalization and competitive analysis:
+
+1. **Create MongoDB Atlas account:**
+   - Go to https://cloud.mongodb.com and sign up
+   - Create a free M0 cluster
+   - Get your connection string from "Connect" → "Connect your application"
+
+2. **Populate the database with mock data:**
+   ```bash
+   uv run python setup_mongodb.py
+   ```
+   This creates:
+   - `sales_outbound.contacts` - Contact records with phone numbers, names, and conversation history
+   - `sales_outbound.products` - Competitor product information with differentiation talking points
+
+3. **Create Atlas Search indexes:**
+   - Go to your MongoDB Atlas cluster
+   - Navigate to the "Search" tab
+   - Create two search indexes using the definitions in `atlas_search_indexes.json`
+   
+   Required indexes:
+   - `contacts_phone_search` - For looking up contacts by phone number
+   - `products_name_search` - For fuzzy matching competitor product names
+
+   See `atlas_search_indexes.json` for complete setup instructions.
+
+### Agentic Tools
+
+The agent has three MongoDB-backed tools:
+
+**1. lookup_phone_number(phone_number)**
+- Retrieves contact name, company, and interest level
+- Enables personalized greetings and contextual conversation
+- Example: "Hi Sarah! I'm calling from CloudAnalytics AI..."
+
+**2. get_previous_conversation(phone_number)**
+- Retrieves summary of previous conversation with this contact
+- Provides continuity across multiple touchpoints
+- Example: "I understand you were interested in our predictive analytics features..."
+
+**3. compare_with_competitor(competitor_name)**
+- Automatically called when customer mentions a competitor (Snowflake, Databricks, Sigma)
+- Provides technical differentiation, benefits, and customer proof points
+- Enables intelligent positioning without memorizing competitor info
 
 ## Usage
 
@@ -168,12 +222,15 @@ This demo assumes consent is obtained externally. The AI acknowledges this at th
 
 ```
 sales-outbound-caller/
-├── warm_transfer.py      # Main agent logic
-├── make_call.py          # Script to initiate outbound calls
-├── hold_music.mp3        # Audio played during transfers
-├── pyproject.toml        # Python dependencies
-├── .env.template         # Environment variable template
-└── README.md            # This file
+├── warm_transfer.py             # Main agent logic with agentic tools
+├── make_call.py                 # Script to initiate outbound calls
+├── mongodb_helper.py            # MongoDB query functions for tools
+├── setup_mongodb.py             # Database setup and mock data population
+├── atlas_search_indexes.json   # Atlas Search index definitions
+├── hold_music.mp3               # Audio played during transfers
+├── pyproject.toml               # Python dependencies
+├── env.example                  # Environment variable template
+└── README.md                    # This file
 ```
 
 ## Troubleshooting
@@ -200,6 +257,18 @@ pkill -9 -f "warm_transfer.py"
 pkill -9 -f "multiprocessing.spawn"
 ```
 
+### MongoDB connection issues
+- Verify `MONGODB_URI` is set correctly in `.env`
+- Check MongoDB Atlas cluster is running and accessible
+- Ensure your IP address is whitelisted in Atlas Network Access
+- Test connection: `uv run python setup_mongodb.py`
+
+### Agentic tools not working
+- Run `setup_mongodb.py` to populate data
+- Verify Atlas Search indexes are created and "Active" status in Atlas UI
+- Check agent logs for MongoDB connection errors
+- Tools will gracefully fall back if MongoDB is unavailable
+
 ## Development
 
 ### Running in Development Mode
@@ -213,6 +282,52 @@ The dev mode watches for file changes and auto-reloads.
 ### Testing
 
 Test with your own phone number first before calling real customers.
+
+## Example Conversations
+
+### Example 1: Personalized Call with Contact Lookup
+
+```
+[Agent calls +13128487404]
+
+Agent: Hi, this is Alex from CloudAnalytics AI. You recently requested information 
+about our platform. Is now a good time for a quick chat?
+
+Customer: Sure, yes.
+
+Agent: [internally calls lookup_phone_number("+13128487404")]
+       Great Sarah! I see you're with TechStart Inc. Let me tell you about 
+       CloudAnalytics AI...
+```
+
+### Example 2: Competitive Positioning
+
+```
+Agent: What's your biggest challenge with data analysis right now?
+
+Customer: Well, we're using Snowflake for our data warehouse but our business 
+team can't really use it without the data engineers.
+
+Agent: [internally calls compare_with_competitor("Snowflake")]
+       That's a common challenge! Snowflake is excellent for data warehousing. 
+       CloudAnalytics AI actually complements Snowflake really well - we sit 
+       on top of your warehouse and add AI-powered analytics. Your business 
+       users can ask questions in plain English without needing to write SQL...
+```
+
+### Example 3: Referencing Previous Conversation
+
+```
+Agent: [internally calls get_previous_conversation("+13128487404")]
+       Hi Sarah! Following up on our conversation from November 10th where 
+       you mentioned interest in our predictive analytics features. Have you 
+       had a chance to think more about that?
+
+Customer: Yes! I wanted to know more about pricing for our team of 15.
+
+Agent: Perfect! Let me connect you with one of our senior sales reps who can 
+       provide detailed pricing. [Initiates transfer]
+```
 
 ## License
 

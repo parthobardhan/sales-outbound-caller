@@ -11,4 +11,5 @@ dependencies = [
     "livekit-plugins-noise-cancellation~=0.2",
     "livekit-plugins-openai~=1.2",
     "python-dotenv",
+    "pymongo[srv]~=4.10",
 ]
