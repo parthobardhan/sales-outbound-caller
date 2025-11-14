@@ -288,10 +288,54 @@ class OutboundAgent(Agent):
             instructions=_outbound_agent_instructions,
         )
         self.session_manager: SessionManager | None = None
+        self.contact_info: dict | None = None
+        self.chat_history: str | None = None
+        self.phone_number: str | None = None
 
     async def on_enter(self):
         """Start the conversation for outbound calls"""
-        self.session.generate_reply()
+        # Automatically look up contact information at the start of the call
+        if self.phone_number:
+            logger.info(f"🔍 Auto-looking up contact info for: {self.phone_number}")
+            try:
+                # Look up contact information
+                self.contact_info = mongodb_helper.lookup_contact_by_phone(self.phone_number)
+                
+                if self.contact_info:
+                    contact_name = self.contact_info.get('name', 'there')
+                    company = self.contact_info.get('company', '')
+                    logger.info(f"✅ Found contact: {contact_name} from {company}")
+                    
+                    # Also retrieve previous conversation history if available
+                    self.chat_history = mongodb_helper.get_chat_history(self.phone_number)
+                    if self.chat_history:
+                        logger.info(f"📝 Found previous conversation history")
+                    
+                    # Generate a personalized greeting with context
+                    greeting_context = f"You are speaking with {contact_name}"
+                    if company:
+                        greeting_context += f" from {company}"
+                    greeting_context += "."
+                    
+                    if self.chat_history:
+                        greeting_context += f" Previous conversation summary: {self.chat_history}"
+                        greeting_context += " Reference this previous interaction naturally in your greeting to show continuity."
+                    
+                    greeting_context += f" Start with a warm, personalized greeting using their name."
+                    
+                    # Generate reply with personalized context
+                    self.session.generate_reply(instructions=greeting_context)
+                else:
+                    logger.info(f"❌ No contact found for {self.phone_number}, using standard greeting")
+                    self.session.generate_reply()
+                    
+            except Exception as e:
+                logger.error(f"Error during auto-lookup: {e}")
+                # Fall back to standard greeting if lookup fails
+                self.session.generate_reply()
+        else:
+            logger.warning("No phone number available for auto-lookup")
+            self.session.generate_reply()
 
     @function_tool
     async def transfer_to_human(self, context: RunContext):
@@ -486,6 +530,18 @@ async def entrypoint(ctx: JobContext):
         "room": ctx.room.name,
     }
 
+    # Extract phone number from job metadata (set by make_call.py)
+    phone_number = None
+    if ctx.job.metadata:
+        try:
+            import json
+            metadata = json.loads(ctx.job.metadata) if isinstance(ctx.job.metadata, str) else ctx.job.metadata
+            phone_number = metadata.get("phone_number")
+            logger.info(f"📞 Phone number from metadata: {phone_number}")
+        except Exception as e:
+            logger.error(f"Error parsing metadata: {e}")
+            logger.info(f"Raw metadata: {ctx.job.metadata}")
+
     # Detect if this is an outbound call based on dispatch metadata
     # When make_call.py dispatches with metadata, we can check for it
 #    is_outbound = ctx.job.metadata and "outbound" in ctx.job.metadata
@@ -500,6 +556,9 @@ async def entrypoint(ctx: JobContext):
         turn_detection=MultilingualModel(),
     )
     agent = OutboundAgent()
+    
+    # Set the phone number on the agent for automatic lookup
+    agent.phone_number = phone_number
 
     # Choose the appropriate agent based on call type
 #    if is_outbound:
@@ -654,9 +713,21 @@ Your goal is to:
 
 # Approach
 
-Start with a warm greeting that acknowledges consent:
-"Hi, this is Alyssa calling from CloudAnalytics AI. You recently requested information about 
-our platform. Is now a good time for a quick chat?"
+Your system automatically looks up the contact's information before the call begins. If available,
+you will have access to:
+- Their name and company
+- Summary of previous conversations (if any)
+
+Use this information to personalize your greeting naturally!
+
+Examples of personalized greetings:
+- With name only: "Hi [Name], this is Alyssa calling from CloudAnalytics AI..."
+- With name and previous conversation: "Hi [Name], this is Alyssa from CloudAnalytics AI. 
+  I wanted to follow up on our previous conversation about [topic from history]..."
+- Without name: "Hi, this is Alyssa calling from CloudAnalytics AI..."
+
+After greeting, acknowledge consent and confirm timing:
+"You recently requested information about our platform. Is now a good time for a quick chat?"
 
 If yes, briefly explain the product:
 "Great! CloudAnalytics AI helps businesses like yours turn data into actionable insights using AI. 
@@ -672,15 +743,19 @@ Listen actively and respond naturally to their needs.
 
 You have access to several tools to personalize and enhance the conversation:
 
-## lookup_phone_number
-Use this to retrieve the contact's name and company information. This helps you personalize
-your greeting and reference their specific context. You can call this at the beginning of 
-the conversation if you want to address them by name.
+## lookup_phone_number (automatically called at start)
+This tool is AUTOMATICALLY invoked when the call begins, so you don't need to call it manually.
+The contact's name and company information will be available to you from the start if found 
+in the database. Use this information naturally in your greeting!
 
-## get_previous_conversation
-Use this to retrieve notes from any previous conversations with this contact. This provides
-continuity and shows you remember their past interactions. Call this when you want to 
-reference what was discussed before.
+## get_previous_conversation (automatically retrieved at start)
+This tool is also AUTOMATICALLY called when the call begins. If there's a previous conversation 
+with this contact, you'll receive a summary at the start. Reference this naturally to show 
+continuity: "I wanted to follow up on what we discussed about..." or "Last time we spoke, 
+you mentioned..."
+
+Both tools are still available if you need to look up information mid-call, but they're 
+primarily used automatically at the beginning.
 
 ## compare_with_competitor
 IMPORTANT: Use this tool whenever the customer mentions they are currently using or evaluating

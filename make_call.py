@@ -2,6 +2,7 @@ import asyncio
 import os
 import logging
 import sys
+import json
 from dotenv import load_dotenv
 from livekit import api
 
@@ -40,11 +41,15 @@ async def make_call(phone_number):
         return
     
     try:
-        # Create agent dispatch with "outbound" metadata so the agent knows it's an outbound call
-        logger.info(f"Creating dispatch for agent {agent_name} in room {room_name}")
+        # Create agent dispatch with metadata including phone number for automatic lookup
+        metadata = json.dumps({
+            "outbound": True,
+            "phone_number": phone_number
+        })
+        logger.info(f"Creating dispatch for agent {agent_name} in room {room_name} with metadata: {metadata}")
         dispatch = await lkapi.agent_dispatch.create_dispatch(
             api.CreateAgentDispatchRequest(
-                agent_name=agent_name, room=room_name, metadata="outbound"
+                agent_name=agent_name, room=room_name, metadata=metadata
             )
         )
         logger.info(f"✅ Created dispatch: {dispatch}")
